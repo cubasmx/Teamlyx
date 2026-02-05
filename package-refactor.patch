@@ -1,0 +1,152 @@
+diff --git a/app/Dockerfile b/app/Dockerfile
+index eac29b9..6cd06ef 100644
+--- a/app/Dockerfile
++++ b/app/Dockerfile
+@@ -13,4 +13,4 @@ COPY . .
+ 
+ EXPOSE 8050
+ 
+-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8050"]
++CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8050"]
+diff --git a/app/hikvision.py b/app/hikvision.py
+index f8e0c5a..e819aed 100644
+--- a/app/hikvision.py
++++ b/app/hikvision.py
+@@ -1,28 +1,16 @@
+ 
+-from dotenv import load_dotenv
+-load_dotenv("/root/rh-hik/.env")
+-import os
+-import requests
+-from requests.auth import HTTPDigestAuth
++from app.hik.client import request_get, request_post_json
++from app.config import BASE_URL, HIK_IP
+ import datetime
+ 
+-HIK_IP = os.getenv("HIK_IP")
+-HIK_USER = os.getenv("HIK_USER")
+-HIK_PAS = os.getenv("HIK_PAS")
+-
+-if not all([HIK_IP, HIK_USER, HIK_PAS]):
+-    raise RuntimeError("Variables de entorno HIK_IP, HIK_USER o HIK_PAS no definidas")
+-
+-BASE_URL = f"http://{HIK_IP}/ISAPI"
+ 
+ def fetch_events(start=None, end=None):
+     if not start:
+-        # Formato ISO sin microsegundos: YYYY-MM-DDTHH:MM:SS
+         start = (datetime.datetime.now() - datetime.timedelta(days=1)).replace(microsecond=0).isoformat()
+     if not end:
+         end = datetime.datetime.now().replace(microsecond=0).isoformat()
+ 
+-    url = f"http://{HIK_IP}/ISAPI/AccessControl/AcsEvent?format=json"
++    url = f"{BASE_URL}/AccessControl/AcsEvent?format=json"
+ 
+     payload = {
+         "AcsEventCond": {
+@@ -30,35 +18,19 @@ def fetch_events(start=None, end=None):
+             "searchResultPosition": 0,
+             "maxResults": 100,
+             "startTime": start,
+-            "endTime": end
++            "endTime": end,
+         }
+     }
++    return request_post_json(url, payload, timeout=15)
+ 
+-    r = requests.post(
+-        url,
+-        json=payload,
+-        auth=HTTPDigestAuth(HIK_USER, HIK_PAS),
+-        timeout=15
+-    )
+-    
+-    # Si falla aquí, el log nos dirá por qué
+-    if r.status_code != 200:
+-        print(f"Error de cámara: {r.status_code} - {r.text}")
+-        r.raise_for_status()
+-        
+-    return r.json()
+ 
+ def test_connection():
+     url = f"{BASE_URL}/System/deviceInfo"
+-    r = requests.get(
+-        url,
+-        auth=HTTPDigestAuth(HIK_USER, HIK_PAS),
+-        timeout=10
+-    )
+-    r.raise_for_status()
++    r = request_get(url, timeout=10)
+     return r.text
+ 
+-def normalize_event(e):
++
++def normalize_event(e: dict):
+     return {
+         "event_ts": e.get("eventTime"),
+         "employee_no": e.get("employeeNo"),
+diff --git a/app/main.py b/app/main.py
+index 59eba94..ed91cf4 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -1,13 +1,9 @@
+-import os
+-from fastapi import FastAPI
+-from fastapi import Request
+-from dotenv import load_dotenv
+-from hik import hik_get
+-from syncer import run_sync
+-from db import get_conn
+-from db_init import init_db
+-
+-load_dotenv("/root/rh-hik/.env")
++from fastapi import FastAPI, Request
++from app.hik.client import request_get
++from app.syncer import run_sync
++from app.db import get_conn
++from app.db_init import init_db  # mantén db_init.py si prefieres
++from app.config import HIK_IP
+ 
+ app = FastAPI(title="RH Hikvision Middleware", version="0.1")
+ 
+@@ -27,7 +23,7 @@ def health():
+ 
+ @app.get("/hik/deviceinfo")
+ def deviceinfo():
+-    r = hik_get("/ISAPI/System/deviceInfo")
++    r = request_get(f"http://{HIK_IP}/ISAPI/System/deviceInfo")
+     return {"status_code": r.status_code, "text": r.text}
+ 
+ @app.post("/sync/hikvision")
+diff --git a/app/syncer.py b/app/syncer.py
+index b18cbb3..d893ac5 100644
+--- a/app/syncer.py
++++ b/app/syncer.py
+@@ -1,13 +1,15 @@
+-from hikvision import fetch_events, normalize_event, HIK_IP
+-from db import insert_raw_events
++from app.hikvision import fetch_events, normalize_event
++from app.db import insert_raw_events
++from app.config import HIK_IP
++
+ 
+ def run_sync():
+     data = fetch_events()
+-    # Hikvision guarda los eventos dentro de InfoList en el formato JSON
++    # En el formato JSON de Hikvision, los eventos vienen dentro de InfoList
+     events = data.get("AcsEvent", {}).get("InfoList", [])
+     
+     if not events:
+-        return 0
++        return {"inserted": 0, "source_count": 0}
+ 
+     normalized = []
+     for e in events:
+@@ -15,4 +17,5 @@ def run_sync():
+         ne["device_ip"] = HIK_IP
+         normalized.append(ne)
+ 
+-    return insert_raw_events(HIK_IP, normalized)
++    inserted = insert_raw_events(HIK_IP, normalized)
++    return {"inserted": inserted, "source_count": len(events)}
+\ No newline at end of file
