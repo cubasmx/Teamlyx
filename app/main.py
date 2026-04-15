@@ -1,11 +1,45 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from app.hik.client import request_get
 from app.syncer import run_sync
 from app.db import get_conn
 from app.db_init import init_db  # mantén db_init.py si prefieres
 from app.config import HIK_IP
+from app.auth import LoginRequest, verify_password, verify_totp, create_access_token
 
 app = FastAPI(title="RH Hikvision Middleware", version="0.1")
+
+# Habilitar CORS para que el Frontend (Panel de Control) pueda enviar peticiones
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.post("/api/login")
+def login(req: LoginRequest):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, username, password_hash, totp_secret FROM usuarios WHERE username = %s", (req.username,))
+            user = cur.fetchone()
+            
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+        
+    usr_id, usr_name, passwd_hash, totp_sec = user
+    
+    if not verify_password(req.password, passwd_hash):
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+        
+    if totp_sec:
+        if not req.totp_code or not verify_totp(totp_sec, req.totp_code):
+            raise HTTPException(status_code=401, detail="Código 2FA incorrecto o faltante")
+            
+    token = create_access_token({"sub": usr_name})
+    return {"access_token": token, "token_type": "bearer"}
+
 
 @app.post("/hikvision/isup")
 async def hik_isup(request: Request):
