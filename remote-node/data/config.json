@@ -1,0 +1,17 @@
+{
+  "hikvision_url": "https://10.10.2.250",
+  "hikvision_user": "admin",
+  "hikvision_pass": "Ensa2025",
+  "horaEntrada": "09:00",
+  "toleranciaEntrada": 0,
+  "horaSalida": "18:00",
+  "diasLaborales": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "temaGlobal": "minimal-light"
+}

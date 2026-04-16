@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Teamlyx — Panel de Asistencia avanzado con filtros, vistas y estadísticas en tiempo real">
+    <title>Teamlyx — Panel de Asistencia</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="stylesheet" href="style.css">
+    <script>
+        if (!localStorage.getItem('teamlyx_token')) {
+            window.location.href = 'index.html';
+        }
+    </script>
+</head>
+<body>
+
+<header class="header">
+    <div class="container">
+        <div class="header-inner">
+            <div class="brand">
+                <div class="brand-logo">T</div>
+                <div>
+                    <h1 class="brand-name">TEAMLYX</h1>
+                    <span class="brand-sub">Panel de Asistencia v3.0</span>
+                </div>
+            <div class="header-right">
+                <button class="theme-toggle-btn" id="btnSettings" title="Configuración Global">⚙️</button>
+                <div class="theme-dropdown" id="themeDropdown">
+                    <button class="theme-toggle-btn" id="btnThemeToggle" title="Cambiar Tema">🎨</button>
+                    <div class="theme-menu" id="themeMenu">
+                        <button class="theme-menu-btn active" data-set="apple-dark"><span class="theme-dot" style="background:#000; border:1px solid #333"></span> Apple Dark</button>
+                        <button class="theme-menu-btn" data-set="minimal-light"><span class="theme-dot" style="background:#f2f2f7; border:1px solid #ddd"></span> Minimal Light</button>
+                        <button class="theme-menu-btn" data-set="monochrome"><span class="theme-dot" style="background:#141414; border:1px solid #444"></span> Monochrome</button>
+                        <button class="theme-menu-btn" data-set="minimal-color"><span class="theme-dot" style="background:#111; border:1px solid #007aff"></span> Minimal Color</button>
+                        <button class="theme-menu-btn" data-set="colorful"><span class="theme-dot" style="background:linear-gradient(45deg, #ff007f, #7928ca)"></span> Gradient Vibe</button>
+                    </div>
+                </div>
+                <div class="header-status">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span id="statusText">Iniciando...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="main">
+<div class="container">
+
+    <!-- CACHE BANNER -->
+    <div class="cache-banner" id="cacheBanner" style="display:none">
+        <div class="spinner spinner--sm"></div>
+        <p>Descargando historial del mes en segundo plano <span class="cache-count"></span></p>
+        <span class="cache-sync"></span>
+    </div>
+
+    <!-- STATS (4 tarjetas) -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-icon">📋</div>
+            <div class="stat-info">
+                <span class="stat-label">Total Registros</span>
+                <span class="stat-value" id="statTotal">—</span>
+            </div>
+        </div>
+        <div class="stat-card stat-card--success">
+            <div class="stat-icon">🟢</div>
+            <div class="stat-info">
+                <span class="stat-label">Entradas</span>
+                <span class="stat-value" id="statEntradas">—</span>
+            </div>
+        </div>
+        <div class="stat-card stat-card--danger">
+            <div class="stat-icon">🔴</div>
+            <div class="stat-info">
+                <span class="stat-label">Salidas</span>
+                <span class="stat-value" id="statSalidas">—</span>
+            </div>
+        </div>
+        <div class="stat-card stat-card--purple">
+            <div class="stat-icon">👥</div>
+            <div class="stat-info">
+                <span class="stat-label">Empleados Únicos</span>
+                <span class="stat-value" id="statEmpleados">—</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="filter-panel">
+        <div class="filter-header">
+            <p class="filter-title">🔍 Filtros de Búsqueda</p>
+            <div class="date-presets">
+                <button class="preset-btn" id="presetHoy"    data-preset="today">Hoy</button>
+                <button class="preset-btn" id="presetAyer"   data-preset="yesterday">Ayer</button>
+                <button class="preset-btn" id="presetSemana" data-preset="week">Esta semana</button>
+                <button class="preset-btn active" id="presetMes" data-preset="month">Este mes</button>
+            </div>
+        </div>
+
+        <div class="filter-body">
+            <!-- Fila 1: Fechas + Horas + Búsqueda -->
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label class="filter-label" for="txtDesde">Fecha inicio</label>
+                    <input type="date" id="txtDesde" class="filter-input">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label" for="txtHasta">Fecha fin</label>
+                    <input type="date" id="txtHasta" class="filter-input">
+                </div>
+                <div class="filter-group filter-group--sm">
+                    <label class="filter-label" for="txtHoraDesde">Hora de</label>
+                    <input type="time" id="txtHoraDesde" class="filter-input">
+                </div>
+                <div class="filter-group filter-group--sm">
+                    <label class="filter-label" for="txtHoraHasta">Hora a</label>
+                    <input type="time" id="txtHoraHasta" class="filter-input">
+                </div>
+                <div class="filter-group filter-group--lg">
+                    <label class="filter-label" for="txtEmpleado">Buscar empleado</label>
+                    <div class="search-wrap">
+                        <input type="text" id="txtEmpleado" class="filter-input" placeholder="Nombre o ID…" autocomplete="off">
+                        <button class="search-clear" id="btnClearSearch" title="Limpiar">✕</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fila 2: Checkboxes + Ordenamiento + Acciones -->
+            <div class="filter-row filter-row--bottom">
+                <div class="checkbox-group">
+                    <label class="filter-label">Mostrar</label>
+                    <div class="checkboxes">
+                        <label class="chk-label chk-label--entry">
+                            <input type="checkbox" id="chkEntradas" checked>
+                            <span class="chk-box"></span>
+                            <span class="chk-dot chk-dot--entry"></span> Entradas
+                        </label>
+                        <label class="chk-label chk-label--exit">
+                            <input type="checkbox" id="chkSalidas" checked>
+                            <span class="chk-box"></span>
+                            <span class="chk-dot chk-dot--exit"></span> Salidas
+                        </label>
+                    </div>
+                </div>
+                <div class="checkbox-group">
+                    <label class="filter-label">Datos</label>
+                    <div class="checkboxes">
+                        <label class="chk-label">
+                            <input type="checkbox" id="chkOcultarSinNombre" checked>
+                            <span class="chk-box"></span>
+                            Ocultar sin nombre
+                        </label>
+                        <label class="chk-label">
+                            <input type="checkbox" id="chkOcultarSinId" checked>
+                            <span class="chk-box"></span>
+                            Ocultar sin ID
+                        </label>
+                        <label class="chk-label chk-label--entry">
+                            <input type="checkbox" id="chkDedupEntradas" checked>
+                            <span class="chk-box"></span>
+                            <span class="chk-dot chk-dot--entry"></span>
+                            Solo 1ª entrada/día
+                        </label>
+                        <label class="chk-label chk-label--falta">
+                            <input type="checkbox" id="chkMostrarFaltas" checked>
+                            <span class="chk-box"></span>
+                            <span class="chk-dot chk-dot--falta"></span>
+                            Mostrar faltas
+                        </label>
+                        <label class="chk-label">
+                            <input type="checkbox" id="chkExcluirFinde" checked>
+                            <span class="chk-box"></span>
+                            Excluir fines de semana
+                        </label>
+                    </div>
+                </div>
+                <div class="sort-controls">
+                    <select id="selOrden" class="filter-select" title="Ordenar por">
+                        <option value="fecha-desc">⬇ Más reciente</option>
+                        <option value="fecha-asc">⬆ Más antiguo</option>
+                        <option value="nombre-asc">A→Z Nombre</option>
+                        <option value="nombre-desc">Z→A Nombre</option>
+                        <option value="empleado-asc">ID ↑</option>
+                        <option value="empleado-desc">ID ↓</option>
+                    </select>
+                    <select id="selPorPagina" class="filter-select" title="Registros por página">
+                        <option value="25">25 / pág</option>
+                        <option value="50" selected>50 / pág</option>
+                        <option value="100">100 / pág</option>
+                        <option value="0">Todos</option>
+                    </select>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn--primary" id="btnCargar">
+                        <span class="btn-icon">⚡</span> Cargar Asistencia
+                    </button>
+                    <button class="btn btn--secondary" id="btnExportar" disabled>
+                        <span class="btn-icon">📥</span> CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RESULTADOS -->
+    <div class="results-section">
+
+        <!-- Tabs de vista -->
+        <div class="view-tabs">
+            <button class="tab-btn active" data-view="eventos">📋 Eventos</button>
+            <button class="tab-btn" data-view="resumen">👥 Por Empleado</button>
+            <button class="tab-btn" data-view="diario">📅 Vista Diaria</button>
+        </div>
+
+        <!-- Cabecera de resultados + paginación -->
+        <div class="results-header">
+            <span class="results-title" id="resultsTitle">Registros de Asistencia</span>
+            <div class="pagination-controls" id="paginationControls" style="display:none">
+                <button class="page-btn" id="btnPrevPage" disabled>‹</button>
+                <span class="page-info" id="pageInfo">1 / 1</span>
+                <button class="page-btn" id="btnNextPage" disabled>›</button>
+            </div>
+            <span class="results-count" id="resultsCount">0</span>
+        </div>
+
+        <!-- Vista: EVENTOS -->
+        <div id="view-eventos" class="view-panel">
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th class="sortable" data-col="empleado">ID <span class="sort-ind">↕</span></th>
+                            <th class="sortable" data-col="nombre">Nombre <span class="sort-ind">↕</span></th>
+                            <th class="sortable" data-col="fecha">Fecha <span class="sort-ind">↓</span></th>
+                            <th>Hora</th>
+                            <th class="sortable" data-col="tipo">Tipo <span class="sort-ind">↕</span></th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listaAsistencia">
+                        <tr class="empty-state"><td colspan="6">
+                            <div class="empty-inner">
+                                <div class="state-icon">📂</div>
+                                <p>Selecciona un rango y presiona <strong>Cargar Asistencia</strong></p>
+                            </div>
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Vista: RESUMEN POR EMPLEADO -->
+        <div id="view-resumen" class="view-panel" style="display:none">
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th class="text-center">Días presente</th>
+                            <th class="text-center">Entradas</th>
+                            <th class="text-center">Salidas</th>
+                            <th>1ª Entrada hoy</th>
+                            <th>Última actividad</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listaResumen">
+                        <tr class="empty-state"><td colspan="7">
+                            <div class="empty-inner"><div class="state-icon">👥</div>
+                            <p>Carga datos para ver el resumen por empleado.</p></div>
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Vista: DIARIA -->
+        <div id="view-diario" class="view-panel" style="display:none">
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Día</th>
+                            <th class="text-center">Empleados</th>
+                            <th class="text-center">Entradas</th>
+                            <th class="text-center">Salidas</th>
+                            <th>Actividad</th>
+                        </tr>
+                    </thead>
+                    <tbody id="listaDiaria">
+                        <tr class="empty-state"><td colspan="6">
+                            <div class="empty-inner"><div class="state-icon">📅</div>
+                            <p>Carga datos para ver la vista diaria.</p></div>
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div><!-- /results-section -->
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🛠️ Configuración Global</h3>
+                <button class="modal-close" id="btnSettingsClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-grid">
+                    <!-- Sección Dispositivo Hikvision -->
+                    <div class="settings-card">
+                        <h4>Conexión Hikvision</h4>
+                        <div class="filter-group">
+                            <label class="filter-label">URL del Checador</label>
+                            <input type="text" id="cfgHikUrl" class="filter-input" placeholder="https://10.10.x.x">
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Usuario</label>
+                            <input type="text" id="cfgHikUser" class="filter-input">
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Contraseña</label>
+                            <input type="password" id="cfgHikPass" class="filter-input">
+                        </div>
+                    </div>
+
+                    <!-- Sección Reglas de Asistencia -->
+                    <div class="settings-card">
+                        <h4>Reglas de Asistencia</h4>
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <label class="filter-label">Hora Entrada</label>
+                                <input type="time" id="cfgHoraEntrada" class="filter-input" value="08:00">
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">Tolerancia (min)</label>
+                                <input type="number" id="cfgTolerancia" class="filter-input" value="15">
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-label">Hora Salida</label>
+                                <input type="time" id="cfgHoraSalida" class="filter-input" value="18:00">
+                            </div>
+                        </div>
+                        <div class="filter-group mt-16">
+                            <label class="filter-label">Días Laborales</label>
+                            <div class="checkboxes" id="cfgDiasLaborales">
+                                <label class="chk-label"><input type="checkbox" value="1"><div class="chk-box"></div> Lun</label>
+                                <label class="chk-label"><input type="checkbox" value="2"><div class="chk-box"></div> Mar</label>
+                                <label class="chk-label"><input type="checkbox" value="3"><div class="chk-box"></div> Mie</label>
+                                <label class="chk-label"><input type="checkbox" value="4"><div class="chk-box"></div> Jue</label>
+                                <label class="chk-label"><input type="checkbox" value="5"><div class="chk-box"></div> Vie</label>
+                                <label class="chk-label"><input type="checkbox" value="6"><div class="chk-box"></div> Sab</label>
+                                <label class="chk-label"><input type="checkbox" value="0"><div class="chk-box"></div> Dom</label>
+                            </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Sección Apariencia -->
+                        <div class="settings-card">
+                            <h4>Apariencia</h4>
+                            <div class="filter-group">
+                                <label class="filter-label">Tema Principal</label>
+                                <div class="date-presets" id="cfgThemeSelector">
+                                    <button class="preset-btn cfg-theme-btn" data-set="apple-dark">Apple Dark</button>
+                                    <button class="preset-btn cfg-theme-btn" data-set="minimal-light">Light</button>
+                                    <button class="preset-btn cfg-theme-btn" data-set="monochrome">Monochrome</button>
+                                    <button class="preset-btn cfg-theme-btn" data-set="minimal-color">Minimal Color</button>
+                                    <button class="preset-btn cfg-theme-btn" data-set="colorful">Gradient</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn--secondary" id="btnSettingsCancel">Cancelar</button>
+                <button class="btn btn--primary" id="btnSettingsSave">💾 Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /container -->
+</main>
+
+<script src="ui-logic.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
